@@ -10,6 +10,10 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Quick visibility on whether Gemini key is present (without printing it)
+const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
+log(`Gemini API key loaded: ${hasGeminiKey ? 'yes' : 'no'}`);
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
