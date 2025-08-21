@@ -48,7 +48,7 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
         <Button
           variant="ghost"
           size="sm"
-          className="md:hidden text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground"
           onClick={onToggleSidebar}
         >
           <Menu className="h-5 w-5" />
