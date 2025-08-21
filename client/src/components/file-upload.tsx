@@ -1,8 +1,8 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { 
   CloudUpload, 
@@ -39,10 +39,75 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
   const [isProcessing, setIsProcessing] = useState(false);
   const [generatedNotes, setGeneratedNotes] = useState<string>('');
   const [quizData, setQuizData] = useState<any>(null);
+  const [isGeneratingNotes, setIsGeneratingNotes] = useState(false);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [showNotesPanel, setShowNotesPanel] = useState(false);
+  const [showQuizPanel, setShowQuizPanel] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Query to get session files
+  const { data: sessionFiles = [] } = useQuery({
+    queryKey: ['/api/sessions', sessionId, 'files'],
+    queryFn: async () => {
+      if (!sessionId) return [];
+      const res = await apiRequest("GET", `/api/sessions/${sessionId}/files`);
+      return res.json();
+    },
+    enabled: !!sessionId,
+  });
+
+  // Query to get session notes
+  const { data: sessionNotes = [] } = useQuery({
+    queryKey: ['/api/sessions', sessionId, 'notes'],
+    queryFn: async () => {
+      if (!sessionId) return [];
+      const res = await apiRequest("GET", `/api/sessions/${sessionId}/notes`);
+      return res.json();
+    },
+    enabled: !!sessionId,
+  });
+
+  // Query to get session quizzes
+  const { data: sessionQuizzes = [] } = useQuery({
+    queryKey: ['/api/sessions', sessionId, 'quizzes'],
+    queryFn: async () => {
+      if (!sessionId) return [];
+      const res = await apiRequest("GET", `/api/sessions/${sessionId}/quizzes`);
+      return res.json();
+    },
+    enabled: !!sessionId,
+  });
+
+  // Effect to restore session state when sessionId changes
+  useEffect(() => {
+    if (sessionId && sessionFiles.length > 0) {
+      setUploadedFile(sessionFiles[0]); // Set the first file
+      
+      // Check if we have existing notes or quizzes to determine the state
+      if (sessionNotes.length > 0) {
+        setGeneratedNotes(sessionNotes[0].content.replace(/^"|"$/g, '')); // Remove quotes if present
+        setProcessingStep('notes');
+        setShowNotesPanel(true);
+      } else if (sessionQuizzes.length > 0) {
+        setQuizData(sessionQuizzes[0]);
+        setProcessingStep('quiz');
+        setShowQuizPanel(true);
+      } else {
+        setProcessingStep('choose'); // Show choice if files exist but no generated content
+      }
+    } else if (sessionId) {
+      // Session exists but no files, reset to upload state
+      setProcessingStep('upload');
+      setUploadedFile(null);
+      setGeneratedNotes('');
+      setQuizData(null);
+      setShowNotesPanel(false);
+      setShowQuizPanel(false);
+    }
+  }, [sessionId, sessionFiles, sessionNotes, sessionQuizzes]);
 
   // Create new session mutation
   const createSessionMutation = useMutation({
@@ -106,14 +171,15 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
     onSuccess: (data) => {
       setGeneratedNotes(data.notes);
       setProcessingStep('notes');
-      setIsProcessing(false);
+      setIsGeneratingNotes(false);
+      setShowNotesPanel(true);
       toast({
         title: "Notes generated",
         description: "Your study notes are ready!",
       });
     },
     onError: (error) => {
-      setIsProcessing(false);
+      setIsGeneratingNotes(false);
       toast({
         title: "Error generating notes",
         description: "There was an error generating your notes. Please try again.",
@@ -131,14 +197,15 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
     onSuccess: (data) => {
       setQuizData(data.quiz);
       setProcessingStep('quiz');
-      setIsProcessing(false);
+      setIsGeneratingQuiz(false);
+      setShowQuizPanel(true);
       toast({
         title: "Quiz generated",
         description: "Your quiz is ready!",
       });
     },
     onError: (error) => {
-      setIsProcessing(false);
+      setIsGeneratingQuiz(false);
       toast({
         title: "Error generating quiz",
         description: "There was an error generating your quiz. Please try again.",
@@ -237,28 +304,28 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
   const handleCreateNotes = async () => {
     if (!sessionId || !uploadedFile) return;
     
-    setIsProcessing(true);
+    setIsGeneratingNotes(true);
     try {
       await generateNotesMutation.mutateAsync({ 
         targetSessionId: sessionId, 
         fileId: uploadedFile.id 
       });
     } catch (error) {
-      setIsProcessing(false);
+      setIsGeneratingNotes(false);
     }
   };
 
   const handleCreateQuiz = async () => {
     if (!sessionId || !uploadedFile) return;
     
-    setIsProcessing(true);
+    setIsGeneratingQuiz(true);
     try {
       await generateQuizMutation.mutateAsync({ 
         targetSessionId: sessionId, 
         fileId: uploadedFile.id 
       });
     } catch (error) {
-      setIsProcessing(false);
+      setIsGeneratingQuiz(false);
     }
   };
 
@@ -267,6 +334,16 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
     setProcessingStep('upload');
     setGeneratedNotes('');
     setQuizData(null);
+    setShowNotesPanel(false);
+    setShowQuizPanel(false);
+    setIsGeneratingNotes(false);
+    setIsGeneratingQuiz(false);
+  };
+
+  const handleBackToChoose = () => {
+    setProcessingStep('choose');
+    setShowNotesPanel(false);
+    setShowQuizPanel(false);
   };
 
   const getFileIcon = () => {
@@ -381,28 +458,32 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Button
               onClick={handleCreateNotes}
-              disabled={isProcessing}
+              disabled={isGeneratingNotes || isGeneratingQuiz}
               className="h-24 flex flex-col items-center justify-center space-y-2 bg-gradient-orange-yellow hover:bg-primary/90 text-primary-foreground"
             >
-              {isProcessing ? (
+              {isGeneratingNotes ? (
                 <Loader2 className="h-6 w-6 animate-spin" />
               ) : (
                 <BookOpen className="h-6 w-6" />
               )}
-              <span className="font-medium">Create Notes</span>
+              <span className="font-medium">
+                {isGeneratingNotes ? "Generating..." : "Create Notes"}
+              </span>
             </Button>
 
             <Button
               onClick={handleCreateQuiz}
-              disabled={isProcessing}
+              disabled={isGeneratingNotes || isGeneratingQuiz}
               className="h-24 flex flex-col items-center justify-center space-y-2 bg-gradient-orange-yellow hover:bg-primary/90 text-primary-foreground"
             >
-              {isProcessing ? (
+              {isGeneratingQuiz ? (
                 <Loader2 className="h-6 w-6 animate-spin" />
               ) : (
                 <Brain className="h-6 w-6" />
               )}
-              <span className="font-medium">Create Quiz</span>
+              <span className="font-medium">
+                {isGeneratingQuiz ? "Generating..." : "Create Quiz"}
+              </span>
             </Button>
           </div>
 
@@ -430,7 +511,7 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
             <h2 className="text-2xl font-bold text-foreground font-poppins">Study Notes</h2>
             <Button
               variant="outline"
-              onClick={handleBackToUpload}
+              onClick={handleBackToChoose}
               className="text-muted-foreground"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -438,79 +519,81 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
             </Button>
           </div>
 
-          <div className="bg-white dark:bg-gray-900 border border-border rounded-xl p-6 shadow-lg">
-            <div className="prose prose-lg max-w-none notes-container">
-              <style jsx>{`
-                .notes-container h1, .notes-container h2, .notes-container h3 {
-                  font-family: 'Poppins', sans-serif;
-                  margin-top: 1.5rem;
-                  margin-bottom: 0.75rem;
-                }
-                .notes-container h1 {
-                  color: #1e3a8a;
-                  background: #fef3c7;
-                  padding: 0.5rem 1rem;
-                  border-radius: 0.5rem;
-                  font-size: 1.5rem;
-                }
-                .notes-container h2 {
-                  color: #ea580c;
-                  background: #fed7aa;
-                  padding: 0.375rem 0.75rem;
-                  border-radius: 0.375rem;
-                  font-size: 1.25rem;
-                }
-                .notes-container h3 {
-                  color: #16a34a;
-                  background: #dcfce7;
-                  padding: 0.25rem 0.5rem;
-                  border-radius: 0.25rem;
-                  font-size: 1.125rem;
-                }
-                .notes-container mark {
-                  background: #fbbf24;
-                  color: #1f2937;
-                  padding: 0.125rem 0.25rem;
-                  border-radius: 0.25rem;
-                }
-                .notes-container ul, .notes-container ol {
-                  margin: 0.75rem 0;
-                  padding-left: 1.5rem;
-                }
-                .notes-container li {
-                  margin: 0.5rem 0;
-                  line-height: 1.6;
-                }
-                .notes-container strong {
-                  color: #7c2d12;
-                  font-weight: 600;
-                }
-                .notes-container em {
-                  color: #7c3aed;
-                  font-style: italic;
-                }
-                .notes-container p {
-                  margin: 0.75rem 0;
-                  line-height: 1.7;
-                  color: #374151;
-                }
-                .dark .notes-container p {
-                  color: #d1d5db;
-                }
-                .dark .notes-container h1 {
-                  color: #60a5fa;
-                  background: #1e3a8a;
-                }
-                .dark .notes-container h2 {
-                  color: #fb923c;
-                  background: #9a3412;
-                }
-                .dark .notes-container h3 {
-                  color: #4ade80;
-                  background: #166534;
-                }
-              `}</style>
-              <div dangerouslySetInnerHTML={{ __html: generatedNotes }} />
+          <div className="bg-white dark:bg-gray-900 border border-border rounded-xl shadow-lg max-h-[70vh] overflow-hidden flex flex-col">
+            <div className="p-6 flex-1 overflow-y-auto">
+              <div className="prose prose-lg max-w-none notes-container">
+                <style>{`
+                  .notes-container h1, .notes-container h2, .notes-container h3 {
+                    font-family: 'Poppins', sans-serif;
+                    margin-top: 1.5rem;
+                    margin-bottom: 0.75rem;
+                  }
+                  .notes-container h1 {
+                    color: #1e3a8a;
+                    background: #fef3c7;
+                    padding: 0.5rem 1rem;
+                    border-radius: 0.5rem;
+                    font-size: 1.5rem;
+                  }
+                  .notes-container h2 {
+                    color: #ea580c;
+                    background: #fed7aa;
+                    padding: 0.375rem 0.75rem;
+                    border-radius: 0.375rem;
+                    font-size: 1.25rem;
+                  }
+                  .notes-container h3 {
+                    color: #16a34a;
+                    background: #dcfce7;
+                    padding: 0.25rem 0.5rem;
+                    border-radius: 0.25rem;
+                    font-size: 1.125rem;
+                  }
+                  .notes-container mark {
+                    background: #fbbf24;
+                    color: #1f2937;
+                    padding: 0.125rem 0.25rem;
+                    border-radius: 0.25rem;
+                  }
+                  .notes-container ul, .notes-container ol {
+                    margin: 0.75rem 0;
+                    padding-left: 1.5rem;
+                  }
+                  .notes-container li {
+                    margin: 0.5rem 0;
+                    line-height: 1.6;
+                  }
+                  .notes-container strong {
+                    color: #7c2d12;
+                    font-weight: 600;
+                  }
+                  .notes-container em {
+                    color: #7c3aed;
+                    font-style: italic;
+                  }
+                  .notes-container p {
+                    margin: 0.75rem 0;
+                    line-height: 1.7;
+                    color: #374151;
+                  }
+                  .dark .notes-container p {
+                    color: #d1d5db;
+                  }
+                  .dark .notes-container h1 {
+                    color: #60a5fa;
+                    background: #1e3a8a;
+                  }
+                  .dark .notes-container h2 {
+                    color: #fb923c;
+                    background: #9a3412;
+                  }
+                  .dark .notes-container h3 {
+                    color: #4ade80;
+                    background: #166534;
+                  }
+                `}</style>
+                <div dangerouslySetInnerHTML={{ __html: generatedNotes }} />
+              </div>
             </div>
           </div>
         </div>
@@ -527,7 +610,7 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
             <h2 className="text-2xl font-bold text-foreground font-poppins">Quiz</h2>
             <Button
               variant="outline"
-              onClick={handleBackToUpload}
+              onClick={handleBackToChoose}
               className="text-muted-foreground"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -535,28 +618,30 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
             </Button>
           </div>
 
-          <div className="space-y-6">
-            {quizData.questions?.map((question: any, index: number) => (
-              <QuizQuestion 
-                key={index} 
-                question={question} 
-                questionNumber={index + 1} 
-              />
-            ))}
-            
-            <div className="text-center pt-6">
-              <Button
-                className="bg-gradient-orange-yellow hover:bg-primary/90 text-primary-foreground px-8 py-3"
-                onClick={() => {
-                  // Calculate score logic would go here
-                  toast({
-                    title: "Quiz completed!",
-                    description: "Check your answers and explanations above.",
-                  });
-                }}
-              >
-                Submit Quiz
-              </Button>
+          <div className="max-h-[70vh] overflow-y-auto bg-white dark:bg-gray-900 border border-border rounded-xl shadow-lg">
+            <div className="p-6 space-y-6">
+              {quizData.questions?.map((question: any, index: number) => (
+                <QuizQuestion 
+                  key={index} 
+                  question={question} 
+                  questionNumber={index + 1} 
+                />
+              ))}
+              
+              <div className="text-center pt-6 border-t border-border">
+                <Button
+                  className="bg-gradient-orange-yellow hover:bg-primary/90 text-primary-foreground px-8 py-3"
+                  onClick={() => {
+                    // Calculate score logic would go here
+                    toast({
+                      title: "Quiz completed!",
+                      description: "Check your answers and explanations above.",
+                    });
+                  }}
+                >
+                  Submit Quiz
+                </Button>
+              </div>
             </div>
           </div>
         </div>
