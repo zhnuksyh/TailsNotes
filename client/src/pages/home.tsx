@@ -1,7 +1,7 @@
 import { useState } from "react";
 import Sidebar from "@/components/sidebar";
 import Header from "@/components/header";
-import WelcomeMessage from "@/components/welcome-message";
+
 import FileUpload from "@/components/file-upload";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -41,27 +41,17 @@ export default function HomePage() {
       />
 
       {/* Main Content */}
-      <div className="ml-0 md:ml-64 h-full flex flex-col">
+      <div className={`transition-all duration-300 h-full flex flex-col ${isSidebarOpen ? 'ml-64' : 'ml-0'}`}>
         <Header
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         />
 
-        <main className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto px-6 py-8">
-            {!currentSessionId ? (
-              <>
-                <WelcomeMessage />
-                <FileUpload 
-                  sessionId={currentSessionId}
-                  onSessionCreated={setCurrentSessionId}
-                />
-              </>
-            ) : (
-              <FileUpload 
-                sessionId={currentSessionId}
-                onSessionCreated={setCurrentSessionId}
-              />
-            )}
+        <main className="flex-1 flex items-center justify-center p-6">
+          <div className="w-full max-w-3xl">
+            <FileUpload 
+              sessionId={currentSessionId}
+              onSessionCreated={setCurrentSessionId}
+            />
           </div>
         </main>
       </div>

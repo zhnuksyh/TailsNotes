@@ -36,7 +36,7 @@ export default function Sidebar({
     <div className={`
       fixed left-0 top-0 h-full w-64 bg-sidebar border-r border-sidebar-border text-sidebar-foreground z-50 
       transform transition-transform duration-300
-      ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      ${isOpen ? 'translate-x-0' : '-translate-x-full'}
     `}>
       <div className="flex flex-col h-full">
         {/* Header */}
@@ -46,7 +46,7 @@ export default function Sidebar({
             <Button
               variant="ghost"
               size="sm"
-              className="md:hidden text-muted-foreground hover:text-foreground p-1"
+              className="text-muted-foreground hover:text-foreground p-1"
               onClick={onClose}
             >
               <X className="h-5 w-5" />

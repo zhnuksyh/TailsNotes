@@ -237,18 +237,18 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* File Upload Section */}
       <Card className="bg-card border-border">
-        <CardContent className="p-8">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-foreground mb-3 font-poppins">Upload Your Slides</h2>
+        <CardContent className="p-6">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold text-foreground mb-2 font-poppins">Upload Your Slides</h2>
             <p className="text-muted-foreground font-helvetica">Drag and drop your files or click to browse</p>
           </div>
           
           <div 
             className={`
-              border-2 border-dashed rounded-2xl p-12 text-center transition-all duration-300 cursor-pointer
+              border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 cursor-pointer
               ${isDragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-primary/5'}
             `}
             onDragOver={handleDragOver}
@@ -256,22 +256,22 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
           >
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div className="flex justify-center">
-                <div className="w-20 h-20 bg-gradient-orange-yellow rounded-2xl flex items-center justify-center shadow-lg">
-                  <CloudUpload className="text-primary-foreground h-10 w-10" />
+                <div className="w-16 h-16 bg-gradient-orange-yellow rounded-2xl flex items-center justify-center shadow-lg">
+                  <CloudUpload className="text-primary-foreground h-8 w-8" />
                 </div>
               </div>
               
               <div>
-                <p className="text-xl font-medium text-foreground mb-2 font-poppins">Drop your files here</p>
-                <p className="text-muted-foreground mb-6 font-helvetica">or click to browse from your computer</p>
+                <p className="text-lg font-medium text-foreground mb-2 font-poppins">Drop your files here</p>
+                <p className="text-muted-foreground mb-4 font-helvetica">or click to browse from your computer</p>
                 
                 <Button 
-                  className="bg-gradient-orange-yellow hover:hover:bg-primary/90 text-primary-foreground font-medium transition-all px-8 py-3"
+                  className="bg-gradient-orange-yellow hover:hover:bg-primary/90 text-primary-foreground font-medium transition-all px-6 py-2"
                   type="button"
                 >
-                  <FolderOpen className="h-5 w-5 mr-2" />
+                  <FolderOpen className="h-4 w-4 mr-2" />
                   Choose Files
                 </Button>
                 
@@ -343,10 +343,10 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
           
           {/* Processing Options */}
           {uploadedFiles.length > 0 && (
-            <div className="mt-8 p-6 bg-card border border-border rounded-xl">
-              <h3 className="font-semibold text-foreground mb-6 font-poppins">Processing Options</h3>
+            <div className="mt-6 p-4 bg-card border border-border rounded-xl">
+              <h3 className="font-semibold text-foreground mb-4 font-poppins">Processing Options</h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div className="flex items-center space-x-2">
                   <Checkbox 
                     id="generateNotes" 
