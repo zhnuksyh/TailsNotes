@@ -4,8 +4,6 @@
 
 Transform your presentations into beautiful notes and interactive quizzes with AI.
 
-![TailsNotes Logo](https://img.shields.io/badge/TailsNotes-AI%20Learning-orange?style=for-the-badge&logo=brain)
-
 ## 🌟 Overview
 
 TailsNotes is an intelligent learning companion that transforms your PowerPoint presentations and PDF documents into comprehensive study materials. Using advanced AI technology, it automatically generates structured notes and interactive quizzes to enhance your learning experience.
