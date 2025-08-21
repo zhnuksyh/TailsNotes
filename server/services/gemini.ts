@@ -1,6 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 
 // the newest Gemini model series is "gemini-2.5-flash" or "gemini-2.5-pro"
+console.log('🔑 Gemini API Key loaded:', !!process.env.GEMINI_API_KEY);
+console.log('🔑 API Key length:', process.env.GEMINI_API_KEY?.length || 0);
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 export async function generateNotesFromText(text: string): Promise<string> {
