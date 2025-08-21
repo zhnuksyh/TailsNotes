@@ -53,7 +53,7 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <h1 className="text-xl font-poppins font-semibold text-foreground hidden sm:block">
+        <h1 className="text-xl font-poppins font-semibold text-foreground">
           TailsNotes
         </h1>
       </div>

@@ -43,14 +43,6 @@ export default function Sidebar({
         <div className="p-4 border-b border-sidebar-border">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-poppins font-semibold text-gradient-orange">TailsNotes</h2>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground hover:text-foreground p-1"
-              onClick={onClose}
-            >
-              <X className="h-5 w-5" />
-            </Button>
           </div>
           
           {/* New Session Button */}

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -239,12 +239,11 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
   return (
     <div className="space-y-6">
       {/* File Upload Section */}
-      <Card className="bg-card border-border">
-        <CardContent className="p-6">
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-foreground mb-2 font-poppins">Upload Your Slides</h2>
-            <p className="text-muted-foreground font-helvetica">Drag and drop your files or click to browse</p>
-          </div>
+      <div className="p-6">
+        <div className="text-center mb-6">
+          <h2 className="text-2xl font-bold text-foreground mb-2 font-poppins">Upload Your Slides</h2>
+          <p className="text-muted-foreground font-helvetica">Drag and drop your files or click to browse</p>
+        </div>
           
           <div 
             className={`
@@ -420,8 +419,7 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }
