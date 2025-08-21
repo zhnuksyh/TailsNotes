@@ -1,10 +1,5 @@
 import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -13,11 +8,13 @@ import {
   CloudUpload, 
   FolderOpen, 
   FileText, 
-  File, 
   X, 
-  Check, 
+  BookOpen,
+  Brain,
+  ArrowLeft,
   Loader2,
-  Sparkles 
+  CheckCircle,
+  XCircle
 } from "lucide-react";
 
 interface FileUploadProps {
@@ -37,11 +34,11 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const [generateNotes, setGenerateNotes] = useState(true);
-  const [generateQuiz, setGenerateQuiz] = useState(true);
-  const [processingFocus, setProcessingFocus] = useState("comprehensive");
+  const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
+  const [processingStep, setProcessingStep] = useState<'upload' | 'choose' | 'notes' | 'quiz'>('upload');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [generatedNotes, setGeneratedNotes] = useState<string>('');
+  const [quizData, setQuizData] = useState<any>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -59,11 +56,11 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
     },
   });
 
-  // Upload files mutation
-  const uploadFilesMutation = useMutation({
-    mutationFn: async ({ files, targetSessionId }: { files: File[]; targetSessionId: string }) => {
+  // Upload single file mutation
+  const uploadFileMutation = useMutation({
+    mutationFn: async ({ file, targetSessionId }: { file: File; targetSessionId: string }) => {
       const formData = new FormData();
-      files.forEach(file => formData.append('files', file));
+      formData.append('files', file);
       
       const res = await fetch(`/api/sessions/${targetSessionId}/upload`, {
         method: 'POST',
@@ -78,42 +75,75 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
       return res.json();
     },
     onSuccess: (data) => {
-      setUploadedFiles(data.files);
+      if (data.files && data.files.length > 0) {
+        setUploadedFile(data.files[0]);
+        setProcessingStep('choose');
+      }
+      setIsUploading(false);
+      setUploadProgress(0);
       toast({
-        title: "Files uploaded successfully",
-        description: `${data.files.length} file(s) uploaded and ready for processing.`,
+        title: "Upload successful",
+        description: "File uploaded successfully.",
       });
     },
     onError: (error) => {
       toast({
         title: "Upload failed",
-        description: "There was an error uploading your files. Please try again.",
+        description: "There was an error uploading your file. Please try again.",
+        variant: "destructive",
+      });
+      setIsUploading(false);
+      setUploadProgress(0);
+    },
+  });
+
+  // Generate notes mutation
+  const generateNotesMutation = useMutation({
+    mutationFn: async ({ targetSessionId, fileId }: { targetSessionId: string; fileId: string }) => {
+      const res = await apiRequest("POST", `/api/sessions/${targetSessionId}/generate-notes`, { fileId });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setGeneratedNotes(data.notes);
+      setProcessingStep('notes');
+      setIsProcessing(false);
+      toast({
+        title: "Notes generated",
+        description: "Your study notes are ready!",
+      });
+    },
+    onError: (error) => {
+      setIsProcessing(false);
+      toast({
+        title: "Error generating notes",
+        description: "There was an error generating your notes. Please try again.",
         variant: "destructive",
       });
     },
   });
 
-  // Process files mutation
-  const processFilesMutation = useMutation({
-    mutationFn: async ({ targetSessionId, options }: { targetSessionId: string; options: any }) => {
-      const res = await apiRequest("POST", `/api/sessions/${targetSessionId}/process`, options);
+  // Generate quiz mutation
+  const generateQuizMutation = useMutation({
+    mutationFn: async ({ targetSessionId, fileId }: { targetSessionId: string; fileId: string }) => {
+      const res = await apiRequest("POST", `/api/sessions/${targetSessionId}/generate-quiz`, { fileId });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setQuizData(data.quiz);
+      setProcessingStep('quiz');
+      setIsProcessing(false);
       toast({
-        title: "Processing started",
-        description: "Your files are being processed. This may take a few minutes.",
+        title: "Quiz generated",
+        description: "Your quiz is ready!",
       });
-      setIsProcessing(true);
-      // In a real app, you'd poll for status or use websockets
-      setTimeout(() => {
-        setIsProcessing(false);
-        toast({
-          title: "Processing complete",
-          description: "Your notes and quizzes are ready!",
-        });
-        queryClient.invalidateQueries({ queryKey: ['/api/sessions'] });
-      }, 5000);
+    },
+    onError: (error) => {
+      setIsProcessing(false);
+      toast({
+        title: "Error generating quiz",
+        description: "There was an error generating your quiz. Please try again.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -141,20 +171,30 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
   }, []);
 
   const handleFiles = async (files: File[]) => {
-    // Validate files
-    const validFiles = files.filter(file => {
-      const validTypes = [
-        'application/pdf',
-        'application/vnd.ms-powerpoint',
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-      ];
-      return validTypes.includes(file.type) && file.size <= 50 * 1024 * 1024; // 50MB
-    });
-
-    if (validFiles.length === 0) {
+    // Only allow one file
+    if (files.length > 1) {
       toast({
-        title: "Invalid files",
-        description: "Please select PDF or PowerPoint files under 50MB.",
+        title: "Multiple files not allowed",
+        description: "Please upload only one file at a time.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const file = files[0];
+    if (!file) return;
+
+    // Validate file
+    const validTypes = [
+      'application/pdf',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    ];
+    
+    if (!validTypes.includes(file.type) || file.size > 50 * 1024 * 1024) {
+      toast({
+        title: "Invalid file",
+        description: "Please select a PDF or PowerPoint file under 50MB.",
         variant: "destructive",
       });
       return;
@@ -176,12 +216,12 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
       }
     }
 
-    // Upload files
+    // Upload file
     setIsUploading(true);
     setUploadProgress(50);
 
     try {
-      await uploadFilesMutation.mutateAsync({ files: validFiles, targetSessionId: targetSessionId! });
+      await uploadFileMutation.mutateAsync({ file, targetSessionId: targetSessionId! });
       setUploadProgress(100);
       
       setTimeout(() => {
@@ -194,56 +234,59 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
     }
   };
 
-  const handleProcessFiles = async () => {
-    if (!sessionId || uploadedFiles.length === 0) {
-      toast({
-        title: "No files to process",
-        description: "Please upload files first.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const handleCreateNotes = async () => {
+    if (!sessionId || !uploadedFile) return;
+    
+    setIsProcessing(true);
     try {
-      await processFilesMutation.mutateAsync({
-        targetSessionId: sessionId,
-        options: { generateNotes, generateQuiz }
+      await generateNotesMutation.mutateAsync({ 
+        targetSessionId: sessionId, 
+        fileId: uploadedFile.id 
       });
     } catch (error) {
-      toast({
-        title: "Processing failed",
-        description: "There was an error processing your files.",
-        variant: "destructive",
+      setIsProcessing(false);
+    }
+  };
+
+  const handleCreateQuiz = async () => {
+    if (!sessionId || !uploadedFile) return;
+    
+    setIsProcessing(true);
+    try {
+      await generateQuizMutation.mutateAsync({ 
+        targetSessionId: sessionId, 
+        fileId: uploadedFile.id 
       });
+    } catch (error) {
+      setIsProcessing(false);
     }
   };
 
-  const removeFile = (fileId: string) => {
-    setUploadedFiles(files => files.filter(f => f.id !== fileId));
+  const handleBackToUpload = () => {
+    setUploadedFile(null);
+    setProcessingStep('upload');
+    setGeneratedNotes('');
+    setQuizData(null);
   };
 
-  const clearAllFiles = () => {
-    setUploadedFiles([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+  const getFileIcon = () => {
+    if (!uploadedFile) return <FileText className="h-6 w-6 text-primary-foreground" />;
+    
+    if (uploadedFile.mimeType === 'application/pdf') {
+      return <FileText className="h-6 w-6 text-red-500" />;
     }
+    return <FileText className="h-6 w-6 text-orange-500" />;
   };
 
-  const getFileIcon = (mimeType: string) => {
-    if (mimeType === 'application/pdf') {
-      return <File className="h-6 w-6 text-primary-foreground" />;
-    }
-    return <FileText className="h-6 w-6 text-primary-foreground" />;
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* File Upload Section */}
-      <div className="p-6">
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold text-foreground mb-2 font-poppins">Upload Your Slides</h2>
-          <p className="text-muted-foreground font-helvetica">Drag and drop your files or click to browse</p>
-        </div>
+  // Render upload step
+  if (processingStep === 'upload') {
+    return (
+      <div className="space-y-6">
+        <div className="p-6">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold text-foreground mb-2 font-poppins">Upload Your Slides</h2>
+            <p className="text-muted-foreground font-helvetica">Drag and drop your file or click to browse</p>
+          </div>
           
           <div 
             className={`
@@ -263,7 +306,7 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
               </div>
               
               <div>
-                <p className="text-lg font-medium text-foreground mb-2 font-poppins">Drop your files here</p>
+                <p className="text-lg font-medium text-foreground mb-2 font-poppins">Drop your file here</p>
                 <p className="text-muted-foreground mb-4 font-helvetica">or click to browse from your computer</p>
                 
                 <Button 
@@ -271,155 +314,374 @@ export default function FileUpload({ sessionId, onSessionCreated }: FileUploadPr
                   type="button"
                 >
                   <FolderOpen className="h-4 w-4 mr-2" />
-                  Choose Files
+                  Choose File
                 </Button>
-                
-                <input 
-                  ref={fileInputRef}
-                  type="file" 
-                  className="hidden" 
-                  accept=".pdf,.ppt,.pptx" 
-                  multiple 
-                  onChange={handleFileSelect}
-                />
               </div>
               
-              <div className="text-sm text-muted-foreground font-helvetica">
-                <p>Supported: PDF, PowerPoint (.ppt, .pptx)</p>
-                <p>Max size: 50MB per file</p>
-              </div>
+              <p className="text-sm text-muted-foreground font-helvetica">
+                Supports PDF and PowerPoint files up to 50MB
+              </p>
             </div>
           </div>
-          
-          {/* Upload Progress */}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept=".pdf,.ppt,.pptx"
+            onChange={handleFileSelect}
+          />
+
           {isUploading && (
-            <div className="mt-8">
-              <Progress value={uploadProgress} className="mb-3" />
-              <p className="text-sm text-muted-foreground text-center font-helvetica">Uploading and processing your files...</p>
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-foreground">Uploading...</span>
+                <span className="text-sm text-muted-foreground">{uploadProgress}%</span>
+              </div>
+              <Progress value={uploadProgress} className="h-2" />
             </div>
           )}
-          
-          {/* Uploaded Files List */}
-          {uploadedFiles.length > 0 && (
-            <div className="mt-8">
-              <h3 className="font-semibold text-foreground mb-4 font-poppins">Uploaded Files</h3>
-              
-              <div className="space-y-3">
-                {uploadedFiles.map((file) => (
-                  <div key={file.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-xl border border-border">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-gradient-orange rounded-xl flex items-center justify-center">
-                        {getFileIcon(file.mimeType)}
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground font-poppins">{file.originalName}</p>
-                        <p className="text-sm text-muted-foreground font-helvetica">
-                          {(file.size / 1024 / 1024).toFixed(1)} MB
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {file.status === 'completed' && (
-                        <span className="px-3 py-1 bg-primary/20 text-primary text-xs font-medium rounded-full flex items-center gap-1 font-poppins">
-                          <Check className="h-3 w-3" />
-                          Processed
-                        </span>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive/80 p-1"
-                        onClick={() => removeFile(file.id)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* Processing Options */}
-          {uploadedFiles.length > 0 && (
-            <div className="mt-6 p-4 bg-card border border-border rounded-xl">
-              <h3 className="font-semibold text-foreground mb-4 font-poppins">Processing Options</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="generateNotes" 
-                    checked={generateNotes}
-                    onCheckedChange={(checked) => setGenerateNotes(checked === true)}
-                  />
-                  <Label htmlFor="generateNotes" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 font-poppins">
-                    Generate Notes
-                    <p className="text-xs text-muted-foreground mt-1 font-helvetica">Create structured notes from your content</p>
-                  </Label>
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="generateQuiz" 
-                    checked={generateQuiz}
-                    onCheckedChange={(checked) => setGenerateQuiz(checked === true)}
-                  />
-                  <Label htmlFor="generateQuiz" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 font-poppins">
-                    Create Quizzes
-                    <p className="text-xs text-muted-foreground mt-1 font-helvetica">Generate interactive quiz questions</p>
-                  </Label>
-                </div>
-              </div>
-              
-              <div className="mb-6">
-                <Label className="text-sm font-medium text-foreground mb-2 block font-poppins">
-                  Processing Focus
-                </Label>
-                <Select value={processingFocus} onValueChange={setProcessingFocus}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="comprehensive">Comprehensive Analysis</SelectItem>
-                    <SelectItem value="key-concepts">Key Concepts Only</SelectItem>
-                    <SelectItem value="quick-summary">Quick Summary</SelectItem>
-                    <SelectItem value="detailed">Detailed Deep-dive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              {/* Action Buttons */}
-              <div className="flex gap-4">
-                <Button 
-                  className="flex-1 bg-gradient-orange-yellow hover:hover:bg-primary/90 text-primary-foreground font-medium transition-all py-3"
-                  onClick={handleProcessFiles}
-                  disabled={isProcessing || uploadedFiles.length === 0}
-                >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-5 w-5 mr-2" />
-                      Process with AI
-                    </>
-                  )}
-                </Button>
-                
-                <Button 
-                  variant="outline"
-                  onClick={clearAllFiles}
-                  disabled={isProcessing}
-                  className="border-border text-muted-foreground hover:text-foreground font-helvetica"
-                >
-                  Clear All
-                </Button>
-              </div>
-            </div>
-          )}
+        </div>
       </div>
+    );
+  }
+
+  // Render choice step
+  if (processingStep === 'choose' && uploadedFile) {
+    return (
+      <div className="space-y-6">
+        <div className="p-6">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold text-foreground mb-2 font-poppins">File Uploaded Successfully</h2>
+            <p className="text-muted-foreground font-helvetica">What would you like to create?</p>
+          </div>
+
+          {/* File info */}
+          <div className="bg-card border border-border rounded-xl p-4 mb-6">
+            <div className="flex items-center space-x-3">
+              {getFileIcon()}
+              <div className="flex-1">
+                <p className="font-medium text-foreground">{uploadedFile.originalName}</p>
+                <p className="text-sm text-muted-foreground">
+                  {(uploadedFile.size / (1024 * 1024)).toFixed(1)} MB
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBackToUpload}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Button
+              onClick={handleCreateNotes}
+              disabled={isProcessing}
+              className="h-24 flex flex-col items-center justify-center space-y-2 bg-gradient-orange-yellow hover:bg-primary/90 text-primary-foreground"
+            >
+              {isProcessing ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                <BookOpen className="h-6 w-6" />
+              )}
+              <span className="font-medium">Create Notes</span>
+            </Button>
+
+            <Button
+              onClick={handleCreateQuiz}
+              disabled={isProcessing}
+              className="h-24 flex flex-col items-center justify-center space-y-2 bg-gradient-orange-yellow hover:bg-primary/90 text-primary-foreground"
+            >
+              {isProcessing ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                <Brain className="h-6 w-6" />
+              )}
+              <span className="font-medium">Create Quiz</span>
+            </Button>
+          </div>
+
+          <div className="mt-4 text-center">
+            <Button
+              variant="outline"
+              onClick={handleBackToUpload}
+              className="text-muted-foreground"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Upload Another File
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render notes step
+  if (processingStep === 'notes') {
+    return (
+      <div className="space-y-6">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-foreground font-poppins">Study Notes</h2>
+            <Button
+              variant="outline"
+              onClick={handleBackToUpload}
+              className="text-muted-foreground"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+          </div>
+
+          <div className="bg-white dark:bg-gray-900 border border-border rounded-xl p-6 shadow-lg">
+            <div className="prose prose-lg max-w-none notes-container">
+              <style jsx>{`
+                .notes-container h1, .notes-container h2, .notes-container h3 {
+                  font-family: 'Poppins', sans-serif;
+                  margin-top: 1.5rem;
+                  margin-bottom: 0.75rem;
+                }
+                .notes-container h1 {
+                  color: #1e3a8a;
+                  background: #fef3c7;
+                  padding: 0.5rem 1rem;
+                  border-radius: 0.5rem;
+                  font-size: 1.5rem;
+                }
+                .notes-container h2 {
+                  color: #ea580c;
+                  background: #fed7aa;
+                  padding: 0.375rem 0.75rem;
+                  border-radius: 0.375rem;
+                  font-size: 1.25rem;
+                }
+                .notes-container h3 {
+                  color: #16a34a;
+                  background: #dcfce7;
+                  padding: 0.25rem 0.5rem;
+                  border-radius: 0.25rem;
+                  font-size: 1.125rem;
+                }
+                .notes-container mark {
+                  background: #fbbf24;
+                  color: #1f2937;
+                  padding: 0.125rem 0.25rem;
+                  border-radius: 0.25rem;
+                }
+                .notes-container ul, .notes-container ol {
+                  margin: 0.75rem 0;
+                  padding-left: 1.5rem;
+                }
+                .notes-container li {
+                  margin: 0.5rem 0;
+                  line-height: 1.6;
+                }
+                .notes-container strong {
+                  color: #7c2d12;
+                  font-weight: 600;
+                }
+                .notes-container em {
+                  color: #7c3aed;
+                  font-style: italic;
+                }
+                .notes-container p {
+                  margin: 0.75rem 0;
+                  line-height: 1.7;
+                  color: #374151;
+                }
+                .dark .notes-container p {
+                  color: #d1d5db;
+                }
+                .dark .notes-container h1 {
+                  color: #60a5fa;
+                  background: #1e3a8a;
+                }
+                .dark .notes-container h2 {
+                  color: #fb923c;
+                  background: #9a3412;
+                }
+                .dark .notes-container h3 {
+                  color: #4ade80;
+                  background: #166534;
+                }
+              `}</style>
+              <div dangerouslySetInnerHTML={{ __html: generatedNotes }} />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render quiz step
+  if (processingStep === 'quiz' && quizData) {
+    return (
+      <div className="space-y-6">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-foreground font-poppins">Quiz</h2>
+            <Button
+              variant="outline"
+              onClick={handleBackToUpload}
+              className="text-muted-foreground"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+          </div>
+
+          <div className="space-y-6">
+            {quizData.questions?.map((question: any, index: number) => (
+              <QuizQuestion 
+                key={index} 
+                question={question} 
+                questionNumber={index + 1} 
+              />
+            ))}
+            
+            <div className="text-center pt-6">
+              <Button
+                className="bg-gradient-orange-yellow hover:bg-primary/90 text-primary-foreground px-8 py-3"
+                onClick={() => {
+                  // Calculate score logic would go here
+                  toast({
+                    title: "Quiz completed!",
+                    description: "Check your answers and explanations above.",
+                  });
+                }}
+              >
+                Submit Quiz
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// Quiz Question Component
+interface QuizQuestionProps {
+  question: {
+    question: string;
+    options: string[];
+    correctAnswer: number;
+    explanation: string;
+  };
+  questionNumber: number;
+}
+
+function QuizQuestion({ question, questionNumber }: QuizQuestionProps) {
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [showResult, setShowResult] = useState(false);
+
+  const handleAnswerSelect = (optionIndex: number) => {
+    if (showResult) return;
+    setSelectedAnswer(optionIndex);
+  };
+
+  const handleSubmit = () => {
+    if (selectedAnswer === null) return;
+    setShowResult(true);
+  };
+
+  const isCorrect = selectedAnswer === question.correctAnswer;
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-6">
+      <h3 className="font-semibold text-foreground mb-4 text-lg">
+        {questionNumber}. {question.question}
+      </h3>
+      
+      <div className="space-y-3 mb-4">
+        {question.options.map((option: string, optionIndex: number) => {
+          let buttonClass = "flex items-center space-x-3 w-full p-3 text-left rounded-lg border transition-all ";
+          
+          if (showResult) {
+            if (optionIndex === question.correctAnswer) {
+              buttonClass += "border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300";
+            } else if (optionIndex === selectedAnswer && optionIndex !== question.correctAnswer) {
+              buttonClass += "border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300";
+            } else {
+              buttonClass += "border-border bg-card text-muted-foreground";
+            }
+          } else {
+            if (selectedAnswer === optionIndex) {
+              buttonClass += "border-primary bg-primary/10 text-foreground";
+            } else {
+              buttonClass += "border-border hover:border-primary/50 hover:bg-primary/5 text-foreground";
+            }
+          }
+
+          return (
+            <button
+              key={optionIndex}
+              className={buttonClass}
+              onClick={() => handleAnswerSelect(optionIndex)}
+              disabled={showResult}
+            >
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                selectedAnswer === optionIndex 
+                  ? 'border-primary bg-primary' 
+                  : 'border-muted-foreground'
+              }`}>
+                {selectedAnswer === optionIndex && (
+                  <div className="w-2 h-2 rounded-full bg-primary-foreground" />
+                )}
+              </div>
+              <span className="flex-1">{option}</span>
+              {showResult && optionIndex === question.correctAnswer && (
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              )}
+              {showResult && optionIndex === selectedAnswer && optionIndex !== question.correctAnswer && (
+                <XCircle className="h-5 w-5 text-red-600" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {!showResult && selectedAnswer !== null && (
+        <Button
+          onClick={handleSubmit}
+          className="bg-gradient-orange-yellow hover:bg-primary/90 text-primary-foreground"
+        >
+          Submit Answer
+        </Button>
+      )}
+
+      {showResult && (
+        <div className={`mt-4 p-4 rounded-lg ${
+          isCorrect 
+            ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' 
+            : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
+        }`}>
+          <div className="flex items-center space-x-2 mb-2">
+            {isCorrect ? (
+              <CheckCircle className="h-5 w-5 text-green-600" />
+            ) : (
+              <XCircle className="h-5 w-5 text-red-600" />
+            )}
+            <span className={`font-medium ${
+              isCorrect ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
+            }`}>
+              {isCorrect ? 'Correct!' : 'Incorrect'}
+            </span>
+          </div>
+          <p className={`text-sm ${
+            isCorrect ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+          }`}>
+            {question.explanation}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

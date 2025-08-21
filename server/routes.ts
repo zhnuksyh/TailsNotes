@@ -4,7 +4,7 @@ import multer from "multer";
 import path from "path";
 import { storage } from "./storage";
 import { insertSessionSchema, insertFileSchema } from "@shared/schema";
-import { generateNotesFromText, generateQuizFromText } from "./services/openai";
+import { generateNotesFromText, generateQuizFromText } from "./services/gemini";
 import { processFile, saveUploadedFile } from "./services/fileProcessor";
 
 const upload = multer({ 
@@ -171,7 +171,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Process files and generate content
+  // Generate notes for a specific file
+  app.post("/api/sessions/:sessionId/generate-notes", async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const { fileId } = req.body;
+
+      // Get the file
+      const file = await storage.getFile(fileId);
+      if (!file || file.sessionId !== sessionId) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      // Get file content
+      const filePath = path.join(UPLOAD_DIR, file.filename);
+      const processed = await processFile(filePath, file.originalName, file.mimeType, file.size);
+      
+      if (!processed.text.trim()) {
+        return res.status(400).json({ error: "No content could be extracted from the file" });
+      }
+
+      // Generate notes
+      const notes = await generateNotesFromText(processed.text);
+      
+      res.json({ notes });
+    } catch (error) {
+      console.error("Error generating notes:", error);
+      res.status(500).json({ error: "Failed to generate notes" });
+    }
+  });
+
+  // Generate quiz for a specific file
+  app.post("/api/sessions/:sessionId/generate-quiz", async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const { fileId } = req.body;
+
+      // Get the file
+      const file = await storage.getFile(fileId);
+      if (!file || file.sessionId !== sessionId) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      // Get file content
+      const filePath = path.join(UPLOAD_DIR, file.filename);
+      const processed = await processFile(filePath, file.originalName, file.mimeType, file.size);
+      
+      if (!processed.text.trim()) {
+        return res.status(400).json({ error: "No content could be extracted from the file" });
+      }
+
+      // Generate quiz
+      const quiz = await generateQuizFromText(processed.text);
+      
+      res.json({ quiz });
+    } catch (error) {
+      console.error("Error generating quiz:", error);
+      res.status(500).json({ error: "Failed to generate quiz" });
+    }
+  });
+
+  // Process files and generate content (legacy endpoint)
   app.post("/api/sessions/:sessionId/process", async (req, res) => {
     try {
       const { sessionId } = req.params;
@@ -242,7 +302,7 @@ async function processSessionContent(
     // Generate notes if requested
     if (options.generateNotes) {
       try {
-        const generatedNotes = await generateNotesFromText(combinedContent, 'Combined Session Content');
+        const generatedNotes = await generateNotesFromText(combinedContent);
         
         await storage.createNote({
           sessionId,
@@ -261,7 +321,7 @@ async function processSessionContent(
     // Generate quiz if requested
     if (options.generateQuiz) {
       try {
-        const generatedQuiz = await generateQuizFromText(combinedContent, 'Combined Session Content');
+        const generatedQuiz = await generateQuizFromText(combinedContent);
         
         await storage.createQuiz({
           sessionId,
