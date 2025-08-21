@@ -6,6 +6,11 @@ import { setupVite, serveStatic, log } from "./vite";
 // Load environment variables from .env file
 config();
 
+// Force set the Gemini API key if it's not loaded from .env
+if (!process.env.GEMINI_API_KEY) {
+  process.env.GEMINI_API_KEY = "AIzaSyC_yvhWiFwTfRMklgifO3IzQITJ-KhbV-k";
+}
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

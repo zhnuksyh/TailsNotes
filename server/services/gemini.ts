@@ -1,8 +1,13 @@
 import { GoogleGenAI } from "@google/genai";
 
-// Basic client initialization
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+// Basic client initialization - check API key dynamically
+function getGeminiClient() {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
+  if (!apiKey) {
+    throw new Error("Gemini API key is not configured. Set GEMINI_API_KEY or GOOGLE_API_KEY.");
+  }
+  return new GoogleGenAI({ apiKey });
+}
 
 function stripCodeFences(possiblyFenced: string): string {
   const trimmed = possiblyFenced.trim();
@@ -30,10 +35,8 @@ function safeParseJson<T = any>(raw: string): T {
 }
 
 export async function generateNotesFromText(text: string): Promise<string> {
-  if (!GEMINI_API_KEY) {
-    throw new Error("Gemini API key is not configured. Set GEMINI_API_KEY or GOOGLE_API_KEY.");
-  }
   try {
+    const ai = getGeminiClient();
     const prompt = `You are an expert educational content creator. Analyze the following text from a presentation/document and create comprehensive, visually appealing study notes.
 
 Return ONLY HTML (no markdown code fences). Requirements:
@@ -60,10 +63,8 @@ ${text}`;
 }
 
 export async function generateQuizFromText(text: string): Promise<any> {
-  if (!GEMINI_API_KEY) {
-    throw new Error("Gemini API key is not configured. Set GEMINI_API_KEY or GOOGLE_API_KEY.");
-  }
   try {
+    const ai = getGeminiClient();
     const prompt = `You are an expert quiz creator. Analyze the given text and create a comprehensive multiple-choice quiz.
 
 Return ONLY valid JSON with this structure:
@@ -90,7 +91,7 @@ Text:
 ${text}`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-pro-001",
+      model: "gemini-2.0-flash-001",
       contents: prompt,
     });
 

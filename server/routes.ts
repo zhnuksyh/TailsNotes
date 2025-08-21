@@ -4,10 +4,8 @@ import multer from "multer";
 import path from "path";
 import { storage } from "./storage";
 import { insertSessionSchema, insertFileSchema } from "@shared/schema";
-// Prefer OpenAI for generation to avoid Gemini key issues
-import { generateHtmlNotesFromText, generateQuizFromText as generateQuizOpenAI } from "./services/openai";
 import { processFile, saveUploadedFile } from "./services/fileProcessor";
-import { tryGeminiHtmlNotes, tryGeminiQuiz } from "./services/gemini";
+import { generateNotesFromText as generateGeminiNotes, generateQuizFromText as generateGeminiQuiz } from "./services/gemini";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -193,19 +191,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "No content could be extracted from the file" });
       }
 
-      // Generate notes (HTML) using OpenAI, fallback to Gemini on quota errors
-      let notes: string;
-      try {
-        notes = await generateHtmlNotesFromText(processed.text);
-      } catch (e: any) {
-        const isQuota = e?.message?.toLowerCase().includes("quota") || e?.code === 'insufficient_quota';
-        if (isQuota) {
-          const geminiNotes = await tryGeminiHtmlNotes(processed.text);
-          if (geminiNotes) notes = geminiNotes; else throw e;
-        } else {
-          throw e;
-        }
-      }
+      // Generate notes (HTML) using Gemini
+      const notes = await generateGeminiNotes(processed.text);
       
       res.json({ notes });
     } catch (error) {
@@ -235,19 +222,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "No content could be extracted from the file" });
       }
 
-      // Generate quiz using OpenAI, fallback to Gemini on quota errors
-      let quiz: any;
-      try {
-        quiz = await generateQuizOpenAI(processed.text, file.originalName);
-      } catch (e: any) {
-        const isQuota = e?.message?.toLowerCase().includes("quota") || e?.code === 'insufficient_quota';
-        if (isQuota) {
-          const geminiQuiz = await tryGeminiQuiz(processed.text);
-          if (geminiQuiz) quiz = geminiQuiz; else throw e;
-        } else {
-          throw e;
-        }
-      }
+      // Generate quiz using Gemini
+      const quiz = await generateGeminiQuiz(processed.text);
       
       res.json({ quiz });
     } catch (error) {
@@ -328,7 +304,7 @@ async function processSessionContent(
     // Generate notes if requested
     if (options.generateNotes) {
       try {
-        const generatedNotes = await generateHtmlNotesFromText(combinedContent);
+        const generatedNotes = await generateGeminiNotes(combinedContent);
         
         await storage.createNote({
           sessionId,
@@ -336,7 +312,7 @@ async function processSessionContent(
           metadata: { 
             type: 'ai-generated',
             generatedAt: new Date().toISOString(),
-            source: 'openai'
+            source: 'gemini'
           }
         });
       } catch (error) {
@@ -347,7 +323,7 @@ async function processSessionContent(
     // Generate quiz if requested
     if (options.generateQuiz) {
       try {
-        const generatedQuiz = await generateQuizOpenAI(combinedContent, 'Combined Content');
+        const generatedQuiz = await generateGeminiQuiz(combinedContent);
         
         await storage.createQuiz({
           sessionId,
